@@ -51,6 +51,7 @@ private:
 	void PerformHouseKeeping();
 	void RunL();
 	void DoCancel();
+	void SignalSelf();
 
 	void Lock();
 	void LockLC();
@@ -69,12 +70,13 @@ private:
 	TInt iPendingCallbacks;
 	CPeriodic* iIdleTimer;
 	TInt iCountThreadsCreated; // This is for statistics gathering, not involved in the logic
+	RArray<CWorkerThread*> iPendingThreadLogons; // Not owned
 	};
 
 
 class CThreadDeathWatcher;
 
-class CWorkerThread : public CActive, public MThreadedTask
+class CWorkerThread : public CBase, public MThreadedTask
 	{
 public:
 	static CWorkerThread* NewLC(CThreadPool* aParentPool, RAllocator* aSharedAllocator);
@@ -87,6 +89,7 @@ public:
 	TInt Setup(TInt aTaskId, const TDesC& aThreadName, MTaskRunner::TThreadFunctionL aThreadFunction, TAny* aThreadContext);
 	void Shutdown();
 	~CWorkerThread();
+	void RegisterThreadDeathWatcherOnCurrentThread();
 
 	TBool Running() const { return iWorkerThread.Handle() && iWorkerThread.ExitType() == EExitPending; }
 
@@ -104,9 +107,6 @@ private:
 	void ThreadRun();
 	static TInt ThreadFn(TAny* aSelf);
 	void ThreadFnL();
-
-	void RunL();
-	void DoCancel();
 
 private:
 	CThreadPool* iParentPool;
