@@ -445,3 +445,10 @@ PRJ_EXPORTS
 PRJ_MMPFILES
 ..\memspy\memspy.mmp
 #endif
+
+#ifdef FSHELL_TESTEXECUTE_SUPPORT
+PRJ_EXPORTS
+..\testexecute\testexecute.mmp
+PRJ_MMPFILES
+..\testexecute\testexecute.cif           z:\resource\cif\fshell\testexecute.cif
+#endif
