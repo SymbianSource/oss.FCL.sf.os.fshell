@@ -1,6 +1,3 @@
-//TODO the cpp -I option isn't working so includes are out for the moment... We no longer actually use common.mmh anyway
-//#include <fshell/common.mmh>
-
 doc-root    \epoc32\documentation
 temp-root   \epoc32\build\documentation
 css         documentation-style.css
