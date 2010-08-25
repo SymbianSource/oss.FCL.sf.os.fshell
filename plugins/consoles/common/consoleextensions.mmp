@@ -1,4 +1,4 @@
-// bld.inf
+// consoleextensions.mmp
 // 
 // Copyright (c) 2010 Accenture. All rights reserved.
 // This component and the accompanying materials are made available
@@ -9,13 +9,22 @@
 // Initial Contributors:
 // Accenture - Initial contribution
 //
-#ifndef FSHELL_COMMON_MMH
+
 #include <fshell/common.mmh>
-#endif
 
-PRJ_EXPORTS
-//TODO sort this FSHELL_ROM_INCLUDE(tefcons.iby)
+target			consoleextensions.dll
+targettype		DLL
+uid				0x1000008d FSHELL_UID_CONSOLEEXTENSIONS
+capability		FSHELL_CAP_MMP_NORMAL
 
-PRJ_MMPFILES
-tefcons.mmp
+sourcepath		.
+userinclude		.
+#include <fshell/fsh_system_include.mmh>
 
+source			consoleextensions.cpp
+
+library			euser.lib
+library			econs.lib
+
+nostrictdef
+deffile			.\~\consoleextensions.def
