@@ -24,6 +24,7 @@
 #include "xmodem.h"
 #include "ymodem.h"
 #include "version.h"
+#include "ciftest.h"
 #include "worker_thread.h"
 
 //
@@ -325,6 +326,7 @@ void CCommandFactory::ConstructL()
 #ifdef FSHELL_CORE_SUPPORT_BUILTIN_REBOOT
 	AddThreadCommandL(CCmdReboot::NewLC);
 #endif
+	AddThreadCommandL(CCmdCifTest::NewLC);
 
 	// Add some DOS-style namings of common commands.
 	AddThreadCommandL(_L("del"), CCmdRm::NewLC, CCommandConstructorBase::EAttAlias);

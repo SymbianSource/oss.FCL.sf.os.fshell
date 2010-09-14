@@ -32,3 +32,6 @@ Display sizes in human readable form.
 
 Copyright (c) 2007-2010 Accenture. All rights reserved.
 
+==smoke-test
+
+drvinfo $Quiet
