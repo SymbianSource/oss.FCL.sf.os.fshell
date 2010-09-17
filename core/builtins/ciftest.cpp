@@ -89,7 +89,9 @@ void CCmdCifTest::NextCif()
 		{
 		if (iVerbose)
 			{
-			Printf(_L("%d tests run, %d passes %d failures. %d commands have no tests defined.\r\n"), iPasses + iFailures, iPasses, iFailures, iCifFiles.Count() - iPasses - iFailures);
+			Printf(_L("%d tests run, %d passes %d failures."), iPasses + iFailures, iPasses, iFailures);
+			if (iCifFiles.Count()) Printf(_L(" %d commands have no tests defined."), iCifFiles.Count() - iPasses - iFailures);
+			Printf(_L("\r\n"));
 			}
 		Complete(KErrNone);
 		}

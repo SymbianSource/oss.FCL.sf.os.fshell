@@ -43,6 +43,49 @@ Some notes on how CThreadPool works:
 
 const TInt KCacheTime = 1000000; // 1 second
 
+// Thread death watchers run in the context of the thread pool main thread
+class CThreadDeathWatcher : public CActive
+	{
+public:
+	CThreadDeathWatcher(CWorkerThread* aWorker)
+		: CActive(CActive::EPriorityHigh), iWorker(aWorker)
+		{
+		}
+	~CThreadDeathWatcher()
+		{
+		WT_LOG(_L("Deleting thread death watcher for worker %d"), TUint(iWorker->GetThreadId()));
+		Cancel();
+		}
+	void StartWatching()
+		{
+		CActiveScheduler::Add(this);
+		iWorker->iWorkerThread.Logon(iStatus);
+		SetActive();
+		}
+	CWorkerThread* WorkerThread() const
+		{
+		return iWorker;
+		}
+private:
+	void DoCancel()
+		{
+		iWorker->iWorkerThread.LogonCancel(iStatus);
+		}
+	void RunL()
+		{
+		iWorker->SignalClientThatThreadHasDied();
+		iWorker->iParentPool->WorkerDied(iWorker);
+		// WorkerDied may cause this object to be deleted, so don't add anything that accesses member data below this point!
+		}
+
+private:
+	CWorkerThread* iWorker;
+	};
+
+//
+
+
+
 CThreadPool* CThreadPool::NewL()
 	{
 	CThreadPool* self = new(ELeave) CThreadPool();
@@ -65,17 +108,19 @@ void CThreadPool::ConstructL()
 	iThreadPoolAllocator = &User::Allocator();
 	User::LeaveIfError(iLock.CreateLocal());
 	iThreads.ReserveL(2);
+	iThreadDeathWatchers.ReserveL(2);
 	// We don't create any workers by default
 	}
 
 CThreadPool::~CThreadPool()
 	{
-	WT_LOG(_L("Deleting thread pool. %d threads created during its lifetime"), iCountThreadsCreated);
+	WT_LOG(_L("Deleting thread pool. %d threads created during its lifetime, %d currently and %d watchers"), iCountThreadsCreated, iThreads.Count(), iThreadDeathWatchers.Count());
 	Cancel();
 	for (TInt i = 0; i < iThreads.Count(); i++)
 		{
 		iThreads[i]->Shutdown();
 		}
+	iThreadDeathWatchers.ResetAndDestroy();
 	iThreads.ResetAndDestroy();
 	iLock.Close();
 	delete iIdleTimer;
@@ -85,7 +130,9 @@ CThreadPool::~CThreadPool()
 
 void CThreadPool::Lock()
 	{
+	WT_LOG(_L("Getting lock from thread %d"), TUint(RThread().Id()));
 	iLock.Wait();
+	WT_LOG(_L("Got lock from thread %d"), TUint(RThread().Id()));
 	}
 
 void CThreadPool::SwitchToThreadPoolHeap()
@@ -112,6 +159,7 @@ void CThreadPool::RestoreHeap()
 void CThreadPool::Unlock()
 	{
 	RestoreHeap();
+	WT_LOG(_L("Releasing lock from thread %d"), TUint(RThread().Id()));
 	iLock.Signal();
 	}
 
@@ -154,12 +202,18 @@ MThreadedTask* CThreadPool::NewTaskInSeparateThreadL(const TDesC& aThreadName, T
 	if (foundThread == NULL)
 		{
 		SwitchToThreadPoolHeap();
+		iPendingThreadLogons.ReserveL(iPendingThreadLogons.Count() + 1); // So the Append below can't fail
+		iThreadDeathWatchers.ReserveL(iThreadDeathWatchers.Count() + 1);
+		iThreads.ReserveL(iThreads.Count() + 1);
 		foundThread = CWorkerThread::NewLC(this, requiredAllocator);
+		CThreadDeathWatcher* threadWatcher = new(ELeave) CThreadDeathWatcher(foundThread);
 		iCountThreadsCreated++;
-		WT_LOG(_L("Creating new worker thread %d"), TUint(foundThread->GetThreadId()));
-		iThreads.AppendL(foundThread);
-		CleanupStack::Pop(foundThread);
-		iPendingThreadLogons.AppendL(foundThread);
+		WT_LOG(_L("Created new worker thread %d"), TUint(foundThread->GetThreadId()));
+		iThreads.Append(foundThread);
+		iPendingThreadLogons.Append(threadWatcher);
+		iThreadDeathWatchers.Append(threadWatcher);
+		CleanupStack::Pop(foundThread);	
+
 		SignalSelf(); // So the iPendingThreadLogons gets sorted out in context of main thread
 		RestoreHeap();
 		}
@@ -179,14 +233,19 @@ void CThreadPool::WorkerDied(CWorkerThread* aWorker)
 	// This is now always called in the main thread
 	ASSERT(RThread().Id() == iMainThread.Id());
 
-	// Find it and remove it - the next request will create a new worker if needed
-	for (TInt i = 0; i < iThreads.Count(); i++)
+	for (TInt i = 0; i < iThreadDeathWatchers.Count(); i++)
 		{
-		CWorkerThread* worker = iThreads[i];
-		if (worker == aWorker)
+		if (iThreadDeathWatchers[i]->WorkerThread() == aWorker)
 			{
-			delete worker;
+			// Clean up the watcher first
+			delete iThreadDeathWatchers[i];
+			iThreadDeathWatchers.Remove(i);
+
+			// The indexes in both arrays are guaranteed to be the same
+			ASSERT(iThreads[i] == aWorker);
+			delete aWorker;
 			iThreads.Remove(i);
+
 			break;
 			}
 		}
@@ -234,8 +293,7 @@ void CThreadPool::CleanupAnyWorkersSharingAllocator(RAllocator* aAllocator)
 			{
 			ASSERT(!worker->Busy());
 			worker->Shutdown();
-			delete worker;
-			iThreads.Remove(i);
+			// We don't delete the worker here, let CThreadDeathWatcher handle that
 			}
 		}
 	Unlock();
@@ -271,6 +329,8 @@ void CThreadPool::PerformHouseKeeping()
 			else
 				{
 				// Everything else (that isn't busy) gets cleaned up
+				delete iThreadDeathWatchers[i];
+				iThreadDeathWatchers.Remove(i);
 				worker->Shutdown();
 				delete worker;
 				iThreads.Remove(i);
@@ -302,7 +362,7 @@ void CThreadPool::RunL()
 		{
 		for (TInt i = 0; i < iPendingThreadLogons.Count(); i++)
 			{
-			iPendingThreadLogons[i]->RegisterThreadDeathWatcherOnCurrentThread();
+			iPendingThreadLogons[i]->StartWatching();
 			}
 		SwitchToThreadPoolHeap();
 		iPendingThreadLogons.Reset();
@@ -328,44 +388,11 @@ TInt CThreadPool::TimerCallback(TAny* aSelf)
 	return 0;
 	}
 
-
 ////
 
-class CThreadDeathWatcher : public CActive
-	{
-public:
-	CThreadDeathWatcher(CWorkerThread* aWorker, RThread& aUnderlyingThread)
-		: CActive(CActive::EPriorityHigh), iWorker(aWorker), iThread(aUnderlyingThread)
-		{
-		}
-	~CThreadDeathWatcher()
-		{
-		Cancel();
-		}
-	void StartWatching()
-		{
-		CActiveScheduler::Add(this);
-		iThread.Logon(iStatus);
-		SetActive();
-		}
-private:
-	void DoCancel()
-		{
-		iThread.LogonCancel(iStatus);
-		}
-	void RunL()
-		{
-		Deque(); // Our work is done. Might as well extract ourselves from whatever scheduler we're in while we can
-		iWorker->ThreadDied();
-		}
+const TInt KMaxHeapSize = 1024 * 1024;
 
-private:
-	CWorkerThread* iWorker;
-	RThread& iThread;
-	};
-
-const TInt KMaxHeapSize = KMinHeapSize * 1024;
-
+// CWorkerThreadDispatchers run in the context of the worker thread they're owned by
 class CWorkerThreadDispatcher : public CActive
 	{
 public:
@@ -428,8 +455,6 @@ void CWorkerThread::ConstructL()
 		}
 	User::LeaveIfError(err);
 
-	iThreadDeathWatcher = new(ELeave) CThreadDeathWatcher(this, iWorkerThread);
-
 	TRequestStatus stat;
 	iWorkerThread.Rendezvous(stat);
 
@@ -450,9 +475,8 @@ void CWorkerThread::ConstructL()
 
 CWorkerThread::~CWorkerThread()
 	{
+	WT_LOG(_L("Deleting worker thread %d"), TUint(GetThreadId()));
 	ASSERT(iWorkerThread.Handle() == 0 || iWorkerThread.ExitType() != EExitPending);
-	//Cancel();
-	delete iThreadDeathWatcher;
 	iParentThread.Close();
 	iWorkerThread.Close();
 	}
@@ -601,7 +625,7 @@ RAllocator* CWorkerThread::SharedAllocator() const
 	return iSharedAllocator;
 	}
 
-void CWorkerThread::ThreadDied()
+void CWorkerThread::SignalClientThatThreadHasDied()
 	{
 	WT_LOG(_L("Task %d died with exittype %d reason %d"), iTaskId, iWorkerThread.ExitType(), iWorkerThread.ExitReason());
 	TInt err = iWorkerThread.ExitReason();
@@ -610,7 +634,6 @@ void CWorkerThread::ThreadDied()
 		{
 		iParentThread.RequestComplete(iCompletionStatus, err);
 		}
-	iParentPool->WorkerDied(this);
 	}
 
 TInt CWorkerThread::ThreadFn(TAny* aSelf)
@@ -680,7 +703,3 @@ void CWorkerThread::Shutdown()
 		}
 	}
 
-void CWorkerThread::RegisterThreadDeathWatcherOnCurrentThread()
-	{
-	iThreadDeathWatcher->StartWatching();
-	}

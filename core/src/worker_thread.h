@@ -31,6 +31,7 @@ public:
 	};
 
 class CWorkerThread;
+class CThreadDeathWatcher;
 
 class CThreadPool : public CActive, public MTaskRunner
 	{
@@ -70,11 +71,9 @@ private:
 	TInt iPendingCallbacks;
 	CPeriodic* iIdleTimer;
 	TInt iCountThreadsCreated; // This is for statistics gathering, not involved in the logic
-	RArray<CWorkerThread*> iPendingThreadLogons; // Not owned
+	RArray<CThreadDeathWatcher*> iPendingThreadLogons; // Not owned
+	RPointerArray<CThreadDeathWatcher> iThreadDeathWatchers;
 	};
-
-
-class CThreadDeathWatcher;
 
 class CWorkerThread : public CBase, public MThreadedTask
 	{
@@ -89,7 +88,6 @@ public:
 	TInt Setup(TInt aTaskId, const TDesC& aThreadName, MTaskRunner::TThreadFunctionL aThreadFunction, TAny* aThreadContext);
 	void Shutdown();
 	~CWorkerThread();
-	void RegisterThreadDeathWatcherOnCurrentThread();
 
 	TBool Running() const { return iWorkerThread.Handle() && iWorkerThread.ExitType() == EExitPending; }
 
@@ -99,7 +97,7 @@ public: // From MThreadedTask
 	void AbortTask();
 
 public: // For CThreadDeathWatcher to use
-	void ThreadDied();
+	void SignalClientThatThreadHasDied();
 
 private:
 	CWorkerThread(CThreadPool* aParentPool, RAllocator* aSharedAllocator);
@@ -126,6 +124,7 @@ private:
 	TRequestStatus* iCompletionStatus;
 
 	friend class CWorkerThreadDispatcher;
+	friend class CThreadDeathWatcher;
 	};
 
 #endif

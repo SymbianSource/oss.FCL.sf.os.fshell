@@ -92,3 +92,7 @@ Rather than stop on the first failure, attempt to run all tests even if some of 
 ==copyright
 
 Copyright (c) 2010 Accenture. All rights reserved.
+
+==smoke-test
+
+# Ciftest itself doesn't have a smoketest!

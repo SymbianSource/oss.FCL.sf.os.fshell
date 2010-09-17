@@ -85,3 +85,8 @@ Only applicable with C<--raw> and/or C<--raw-set>. Instead of using 2000AD as th
 
 Copyright (c) 2006-2010 Accenture. All rights reserved.
 
+==smoke-test
+
+date $Quiet
+date --raw $Quiet
+date --timestamp $Quiet
