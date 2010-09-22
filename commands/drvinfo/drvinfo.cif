@@ -34,4 +34,4 @@ Copyright (c) 2007-2010 Accenture. All rights reserved.
 
 ==smoke-test
 
-drvinfo $Quiet
+drvinfo $Silent # Warnings about missing drives are not important
