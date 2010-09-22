@@ -15,7 +15,9 @@
 #define __COMMAND_FACTORY_H__
 
 #include <e32base.h>
-#include "command_constructors.h"
+#include "command_wrappers.h"
+class CCommandConstructorBase;
+class CThreadPool;
 #include "error.h"
 
 class RFs;
@@ -51,6 +53,7 @@ private: // From CActive.
 	virtual void RunL();
 	virtual void DoCancel();
 	virtual TInt RunError(TInt aError);
+
 private:
 	RFs& iFs;
 	mutable RMutex iLock;
@@ -58,6 +61,7 @@ private:
 	TDriveList iDriveList;
 	TBool iFileSystemScanned;
 	TBool iFailedToScanFileSystem;
+	CThreadPool* iThreadPool;
 	};
 
 

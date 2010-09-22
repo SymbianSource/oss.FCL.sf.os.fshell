@@ -14,6 +14,20 @@ __END__
 
 =head1 FShell Change History
 
+=head2 FCL features not yet in MCL (move this section before committing to MCL)
+
+=over 5
+
+=item *
+
+Fshell now reuses threads for built-in commands that execute in quick succession. The thread pool takes into account the requirements of the command when assigning a thread (eg whether it needs to share a heap with its parent command) and creates a new one if necessary. Excess threads are cleaned up after a short idle period (currently 1 second).
+
+=item *
+
+Commands can now define a C<==smoke-test> section in their CIF files, which defines a snippet of fshell script that will be run as part of C<fshell smoketest> or by invoking L<ciftest|commands::ciftest> directly. See the ciftest documentation for more details.
+
+=back
+
 =head2 Release 002 [Not yet released]
 
 =over 5

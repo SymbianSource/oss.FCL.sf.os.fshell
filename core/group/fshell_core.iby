@@ -168,6 +168,7 @@ FSHELL_COMMAND_INFO_FILE(fshell,ps.cif)
 #ifdef FSHELL_CORE_SUPPORT_BUILTIN_REBOOT
 FSHELL_COMMAND_INFO_FILE(fshell,reboot.cif)
 #endif
+FSHELL_COMMAND_INFO_FILE(fshell,ciftest.cif)
 
 #ifdef FSHELL_REPLACE_ECONS
 FSHELL_EXECUTABLE_AS_DATA(iocons.dll,iocons.dll)
